@@ -1,6 +1,9 @@
 # ideas
 .idea/*
 
+# docker compose config files ( they are generated automatically )
+docker-compose/jitsi/*cfg/*
+
 # Binaries for programs and plugins
 *.exe
 *.exe~

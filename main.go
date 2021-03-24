@@ -12,6 +12,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
 )
 
 const (
@@ -23,10 +24,13 @@ const (
 
 var (
 	srv = &http.Server{
-		Addr: fmt.Sprintf("0.0.0.0:%d", 9001),
+		Addr: fmt.Sprintf(":%d", 9001),
 	}
 	intervalStats time.Duration = 5 * time.Second         // Default 5 seconds time duration | set accordingly to JVB config
 	interrupt                   = make(chan os.Signal, 1) // Handle the interrupts with GO routines
+	sugarLogger   *zap.SugaredLogger
+
+	appVersion string
 )
 
 func init() {
@@ -34,6 +38,21 @@ func init() {
 }
 
 func main() {
+	logger, _ := zap.NewProduction()
+	defer logger.Sync() // flushes buffer, if any
+	sugarLogger = logger.Sugar()
+
+	sugarLogger.Info("jitsi-jvb-prometheus-adapter is starting")
+
+	sugarLogger.Infow("failed to fetch URL",
+		// Structured context as loosely typed key-value pairs.
+		"version", appVersion,
+		"endpoint", os.Getenv(envJVBEndpoint),
+		"address", srv.Addr,
+	)
+
+	sugarLogger.Infof("Failed to fetch URL: %s", "sss")
+
 	http.Handle("/metrics", promhttp.Handler())
 
 	go func() {
@@ -48,13 +67,8 @@ func main() {
 		}
 	}()
 
-	prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "", "messages_filtered_total"),
-		"How many messages have been filtered (per channel).",
-		[]string{"channel"}, nil)
-
-	exporter := NewExporter("whatever")
+	exporter := NewJVBMetricsCollector(os.Getenv(envJVBEndpoint))
 	prometheus.MustRegister(exporter)
 
-	log.Fatal(srv.ListenAndServe(), nil)
+	sugarLogger.Fatal(srv.ListenAndServe(), nil)
 }

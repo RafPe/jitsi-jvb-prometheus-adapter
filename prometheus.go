@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"reflect"
 	"strings"
 
@@ -18,13 +17,13 @@ type PrometheusMetric struct {
 	PrometheusDescription *prometheus.Desc     // Prometheus description of metric
 	CustomCollectorFunc   CustomCollector      // [OPTIONAL] Custom collect function for stats which require additonal logic
 }
-type Exporter struct {
+type JVBMetricsCollector struct {
 	jvbEndpoint       string
 	prometheusMetrics []PrometheusMetric
 }
 
-func NewExporter(jvbEndpoint string) *Exporter {
-	exporter := &Exporter{
+func NewJVBMetricsCollector(jvbEndpoint string) *JVBMetricsCollector {
+	exporter := &JVBMetricsCollector{
 		jvbEndpoint: jvbEndpoint,
 	}
 
@@ -34,14 +33,14 @@ func NewExporter(jvbEndpoint string) *Exporter {
 	return exporter
 }
 
-func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
+func (e *JVBMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 
 	for _, metric := range e.prometheusMetrics {
 		ch <- metric.PrometheusDescription
 	}
 }
 
-func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
+func (e *JVBMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 
 	jvbStats, err := e.getJVBStatistics()
 	if err != nil {
@@ -72,52 +71,32 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 }
 
 //getJVBStatistics Retrieves statistics from JVB APIs endpoint
-func (e *Exporter) getJVBStatistics() (*JVBStatistics, error) {
-	// Create a Resty Client
+func (e *JVBMetricsCollector) getJVBStatistics() (*JVBStatistics, error) {
+
 	client := resty.New()
 
 	resp, err := client.R().
 		SetResult(JVBStatistics{}).
 		EnableTrace().
-		Get(os.Getenv(envJVBEndpoint))
-	// Explore response object
-	fmt.Println("Response Info:")
-	fmt.Println("  Error      :", err)
-	fmt.Println("  Status Code:", resp.StatusCode())
-	fmt.Println("  Status     :", resp.Status())
-	fmt.Println("  Proto      :", resp.Proto())
-	fmt.Println("  Time       :", resp.Time())
-	fmt.Println("  Received At:", resp.ReceivedAt())
-	fmt.Println("  Body       :\n", resp)
-	fmt.Println()
-
-	// Explore trace info
-	fmt.Println("Request Trace Info:")
-	ti := resp.Request.TraceInfo()
-	fmt.Println("  DNSLookup     :", ti.DNSLookup)
-	fmt.Println("  ConnTime      :", ti.ConnTime)
-	fmt.Println("  TCPConnTime   :", ti.TCPConnTime)
-	fmt.Println("  TLSHandshake  :", ti.TLSHandshake)
-	fmt.Println("  ServerTime    :", ti.ServerTime)
-	fmt.Println("  ResponseTime  :", ti.ResponseTime)
-	fmt.Println("  TotalTime     :", ti.TotalTime)
-	fmt.Println("  IsConnReused  :", ti.IsConnReused)
-	fmt.Println("  IsConnWasIdle :", ti.IsConnWasIdle)
-	fmt.Println("  ConnIdleTime  :", ti.ConnIdleTime)
-	fmt.Println("  RequestAttempt:", ti.RequestAttempt)
-	fmt.Println("  RemoteAddr    :", ti.RemoteAddr.String())
+		Get(e.jvbEndpoint)
 
 	if err != nil {
+		sugarLogger.Errorw("Failed to retrieve statistics",
+			"endpoint", e.jvbEndpoint,
+			"error:", err,
+			"status_code:", resp.StatusCode(),
+			"status:", resp.Status(),
+			"proto:", resp.Proto(),
+			"result", "sucess",
+		)
+
 		return nil, err
 	}
 
-	//TODO: Handle application errors
-	// if resp.IsError() {
-	// 	e := resp.Error().(*NetworkListErrorv2)
-	// 	if e.Status != 0 {
-	// 		return nil, e
-	// 	}
-	// }
+	sugarLogger.Infow("Sucesfully retrieved JVB statistics from configured endpoint",
+		"endpoint", e.jvbEndpoint,
+		"result", "sucess",
+	)
 
 	stats := resp.Result().(*JVBStatistics)
 
@@ -125,7 +104,7 @@ func (e *Exporter) getJVBStatistics() (*JVBStatistics, error) {
 }
 
 //getMetricValue Retrieves metric value from stats struct by fieldName
-func (e *Exporter) getMetricValue(stats *JVBStatistics, fieldName string) float64 {
+func (e *JVBMetricsCollector) getMetricValue(stats *JVBStatistics, fieldName string) float64 {
 	r := reflect.ValueOf(stats)
 	fieldVal := reflect.Indirect(r).FieldByName(fieldName)
 	promValue := 7.21
@@ -142,7 +121,7 @@ func (e *Exporter) getMetricValue(stats *JVBStatistics, fieldName string) float6
 }
 
 //buildPrometheusMetric creates prometheus descritpion for given metrics
-func (e *Exporter) buildPrometheusMetric() {
+func (e *JVBMetricsCollector) buildPrometheusMetric() {
 
 	fields := reflect.TypeOf(&JVBStatistics{}).Elem()
 	num := fields.NumField()

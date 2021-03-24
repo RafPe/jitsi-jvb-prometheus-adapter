@@ -30,7 +30,7 @@ var (
 	interrupt                   = make(chan os.Signal, 1) // Handle the interrupts with GO routines
 	sugarLogger   *zap.SugaredLogger
 
-	appVersion string
+	appVersion = "v0.0.3"
 )
 
 func init() {

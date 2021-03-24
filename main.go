@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-resty/resty/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -18,32 +17,24 @@ import (
 const (
 	namespace = "jitsi"
 	subsystem = "" // can be jvb
+
+	envJVBEndpoint = "JVB_STATS_URL"
 )
 
 var (
 	srv = &http.Server{
-		Addr: fmt.Sprintf("127.0.0.1:%d", 9001),
+		Addr: fmt.Sprintf("0.0.0.0:%d", 9001),
 	}
 	intervalStats time.Duration = 5 * time.Second         // Default 5 seconds time duration | set accordingly to JVB config
 	interrupt                   = make(chan os.Signal, 1) // Handle the interrupts with GO routines
-
-	promTags []PrometheusTag
 )
 
 func init() {
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
-
-	promTags = listPrometheusTags()
 }
 
 func main() {
 	http.Handle("/metrics", promhttp.Handler())
-
-	// Create a Resty Client
-	client := resty.New()
-
-	_, _ = client.R().
-		Get("https://google.com")
 
 	go func() {
 		for {
